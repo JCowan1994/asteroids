@@ -125,7 +125,7 @@ def main():
                 for shot in list(shots):
                     if not shot.alive():
                         continue
-                    if (asteroid.position - shot.position).length() < asteroid.radius + shot.radius:
+                    if asteroid.collides_with(shot):
                         log_event("asteroid_shot")
                         score += ASTEROID_POINTS
                         # Create explosion at asteroid position
@@ -135,7 +135,7 @@ def main():
                         # One shot can only hit one asteroid per frame.
                         break
             for object in asteroids:
-                if player.collides_with(object) and invulnerability_timer <= 0:
+                if object.collides_with(player) and invulnerability_timer <= 0:
                     log_event("player_hit")
                     lives -= 1
                     if lives <= 0:

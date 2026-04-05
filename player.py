@@ -1,4 +1,4 @@
-import circleshape
+from triangleshape import TriangleShape
 from constants import (
     PLAYER_RADIUS,
     PLAYER_TURN_SPEED,
@@ -13,7 +13,7 @@ from constants import (
 import pygame
 from shot import Shot
 
-class Player(circleshape.CircleShape):
+class Player(TriangleShape):
     def __init__ (self, x, y):
         super().__init__(x, y, PLAYER_RADIUS)
         self.rotation = 0
