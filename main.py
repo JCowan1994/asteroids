@@ -88,6 +88,7 @@ def main():
     lives = STARTING_LIVES
     invulnerability_timer = 0
     game_over = False
+    game_started = False
     powerup_spawn_timer = 0
     
     font = pygame.font.Font(None, 36)
@@ -98,7 +99,11 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return
-            if not game_over and event.type == pygame.KEYDOWN:
+            if not game_started and event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    game_started = True
+                    log_event("game_started")
+            if game_started and not game_over and event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_1:
                     player.set_weapon("single")
                 elif event.key == pygame.K_2:
@@ -116,6 +121,7 @@ def main():
                     lives = STARTING_LIVES
                     invulnerability_timer = 0
                     game_over = False
+                    game_started = False
                     # Clear all sprites and explosions
                     updatable.empty()
                     drawable.empty()
@@ -141,7 +147,7 @@ def main():
                     asteroid_field = AsteroidField()
                     powerup_spawn_timer = 0
         
-        if not game_over:
+        if game_started and not game_over:
             updatable.update(dt)
             powerup_spawn_timer += dt
             if powerup_spawn_timer >= POWERUP_SPAWN_RATE_SECONDS:
@@ -150,7 +156,7 @@ def main():
                     random.uniform(60, SCREEN_WIDTH - 60),
                     random.uniform(60, SCREEN_HEIGHT - 60),
                 )
-        if not game_over:
+        if game_started and not game_over:
             # Iterate over snapshots to avoid re-processing newly spawned asteroids in the same frame.
             for asteroid in list(asteroids):
                 if not asteroid.alive():
@@ -247,7 +253,7 @@ def main():
                     star["size"],
                 )
         
-        if not game_over:
+        if game_started and not game_over:
             # Blink player during invulnerability
             if invulnerability_timer <= 0 or int(invulnerability_timer * 10) % 2 == 0:
                 player.draw(screen)
@@ -303,6 +309,27 @@ def main():
             
             # Decrease invulnerability timer
             invulnerability_timer -= dt
+        elif not game_started:
+            # Display start screen
+            title_text = large_font.render("Asteroids", True, (255, 255, 255))
+            title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 140))
+            screen.blit(title_text, title_rect)
+
+            prompt_text = font.render("Press ENTER to Start", True, (255, 255, 0))
+            prompt_rect = prompt_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 55))
+            screen.blit(prompt_text, prompt_rect)
+
+            controls_1 = font.render("Move: W/S  Rotate: A/D  Shoot: SPACE", True, (220, 220, 220))
+            controls_1_rect = controls_1.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 10))
+            screen.blit(controls_1, controls_1_rect)
+
+            controls_2 = font.render("Weapons: 1/2/3  Drop Bomb: B", True, (220, 220, 220))
+            controls_2_rect = controls_2.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 45))
+            screen.blit(controls_2, controls_2_rect)
+
+            high_score_text = font.render(f"High Score: {high_score}", True, (180, 255, 180))
+            high_score_rect = high_score_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 95))
+            screen.blit(high_score_text, high_score_rect)
         else:
             # Display game over screen
             game_over_text = large_font.render("Game Over!", True, (255, 0, 0))
