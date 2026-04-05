@@ -1,10 +1,15 @@
 import pygame, sys
-from constants import SCREEN_WIDTH, SCREEN_HEIGHT
+import json
+import os
+from constants import SCREEN_WIDTH, SCREEN_HEIGHT, ASTEROID_POINTS, STARTING_LIVES, RESPAWN_INVULNERABILITY_TIME
 from logger import log_state, log_event
 from player import Player
 from asteroid import Asteroid
 from asteroidfield import AsteroidField
 from shot import Shot
+from explosion import Explosion
+
+HIGH_SCORE_FILE = "highscore.json"
 
 def main():
     print(f"Starting Asteroids with pygame version: {pygame.version.ver}")
@@ -18,6 +23,7 @@ def main():
     drawable = pygame.sprite.Group()
     asteroids = pygame.sprite.Group()
     shots = pygame.sprite.Group()
+    explosions = []
 
     Player.containers = (updatable, drawable)
     Asteroid.containers = (asteroids, updatable, drawable)
@@ -28,26 +34,126 @@ def main():
     player = Player(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
     asteroid_field = AsteroidField()
 
+    # Scoring
+    score = 0
+    
+    # Load high score from file
+    if os.path.exists(HIGH_SCORE_FILE):
+        with open(HIGH_SCORE_FILE, "r") as f:
+            data = json.load(f)
+            high_score = data.get("high_score", 0)
+    else:
+        high_score = 0
+    
+    # Lives
+    lives = STARTING_LIVES
+    invulnerability_timer = 0
+    game_over = False
+    
+    font = pygame.font.Font(None, 36)
+    large_font = pygame.font.Font(None, 72)
+
     while True:
         log_state()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return
-        updatable.update(dt)
-        for asteroid in asteroids:
-            for shot in shots:
-                if (asteroid.position - shot.position).length() < asteroid.radius + shot.radius:
-                    log_event("asteroid_shot")
-                    asteroid.split()
-                    shot.kill()
-        for object in asteroids:
-            if player.collides_with(object):
-                log_event("player_hit")
-                print("Game over!")
-                sys.exit()
+            if game_over and event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    # Restart game
+                    score = 0
+                    lives = STARTING_LIVES
+                    invulnerability_timer = 0
+                    game_over = False
+                    # Clear all sprites and explosions
+                    updatable.empty()
+                    drawable.empty()
+                    asteroids.empty()
+                    shots.empty()
+                    explosions.clear()
+                    # Recreate game objects
+                    Player.containers = (updatable, drawable)
+                    Asteroid.containers = (asteroids, updatable, drawable)
+                    AsteroidField.containers = (updatable,)
+                    Shot.containers = (shots, updatable, drawable)
+                    player = Player(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
+                    asteroid_field = AsteroidField()
+        
+        if not game_over:
+            updatable.update(dt)
+        if not game_over:
+            for asteroid in asteroids:
+                for shot in shots:
+                    if (asteroid.position - shot.position).length() < asteroid.radius + shot.radius:
+                        log_event("asteroid_shot")
+                        score += ASTEROID_POINTS
+                        # Create explosion at asteroid position
+                        explosions.append(Explosion(asteroid.position.copy()))
+                        asteroid.split()
+                        shot.kill()
+            for object in asteroids:
+                if player.collides_with(object) and invulnerability_timer <= 0:
+                    log_event("player_hit")
+                    lives -= 1
+                    if lives <= 0:
+                        if score > high_score:
+                            high_score = score
+                            # Save high score to file
+                            with open(HIGH_SCORE_FILE, "w") as f:
+                                json.dump({"high_score": high_score}, f)
+                        game_over = True
+                    else:
+                        # Respawn player
+                        player.position = pygame.Vector2(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
+                        player.velocity = pygame.Vector2(0, 0)
+                        invulnerability_timer = RESPAWN_INVULNERABILITY_TIME
+        else:
+            # During game over, don't update game state
+            pass
         screen.fill("black")
-        for sprite in drawable:
-            sprite.draw(screen)
+        
+        if not game_over:
+            # Blink player during invulnerability
+            if invulnerability_timer <= 0 or int(invulnerability_timer * 10) % 2 == 0:
+                player.draw(screen)
+            for sprite in drawable:
+                if sprite != player:
+                    sprite.draw(screen)
+            
+            # Update and draw explosions
+            current_time = pygame.time.get_ticks() / 1000.0
+            explosions = [exp for exp in explosions if exp.is_alive(current_time)]
+            for explosion in explosions:
+                explosion.draw(screen, current_time)
+            
+            # Display score, high score, and lives
+            score_text = font.render(f"Score: {score}", True, (255, 255, 255))
+            screen.blit(score_text, (10, 10))
+            high_score_text = font.render(f"High Score: {high_score}", True, (255, 255, 255))
+            screen.blit(high_score_text, (SCREEN_WIDTH - 300, 10))
+            lives_text = font.render(f"Lives: {lives}", True, (255, 255, 255))
+            screen.blit(lives_text, (10, SCREEN_HEIGHT - 40))
+            
+            # Decrease invulnerability timer
+            invulnerability_timer -= dt
+        else:
+            # Display game over screen
+            game_over_text = large_font.render("Game Over!", True, (255, 0, 0))
+            game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100))
+            screen.blit(game_over_text, game_over_rect)
+            
+            score_display_text = font.render(f"Score: {score}", True, (255, 255, 255))
+            score_display_rect = score_display_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            screen.blit(score_display_text, score_display_rect)
+            
+            high_score_display_text = font.render(f"High Score: {high_score}", True, (255, 255, 255))
+            high_score_display_rect = high_score_display_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
+            screen.blit(high_score_display_text, high_score_display_rect)
+            
+            restart_text = font.render("Press SPACE to Play Again", True, (255, 255, 0))
+            restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 150))
+            screen.blit(restart_text, restart_rect)
+        
         pygame.display.flip()
         dt = clock.tick(60) / 1000  # Limit to 60 FPS and convert to seconds
         
