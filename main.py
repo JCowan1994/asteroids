@@ -34,6 +34,12 @@ def main():
             if event.type == pygame.QUIT:
                 return
         updatable.update(dt)
+        for asteroid in asteroids:
+            for shot in shots:
+                if (asteroid.position - shot.position).length() < asteroid.radius + shot.radius:
+                    log_event("asteroid_shot")
+                    asteroid.split()
+                    shot.kill()
         for object in asteroids:
             if player.collides_with(object):
                 log_event("player_hit")
