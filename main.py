@@ -81,6 +81,13 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return
+            if not game_over and event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    player.set_weapon("single")
+                elif event.key == pygame.K_2:
+                    player.set_weapon("spread")
+                elif event.key == pygame.K_3:
+                    player.set_weapon("burst")
             if game_over and event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     # Restart game
@@ -183,6 +190,12 @@ def main():
             screen.blit(high_score_text, (SCREEN_WIDTH - 300, 10))
             lives_text = font.render(f"Lives: {lives}", True, (255, 255, 255))
             screen.blit(lives_text, (10, SCREEN_HEIGHT - 40))
+            weapon_text = font.render(
+                f"Weapon: {player.get_weapon_name()} (1/2/3)",
+                True,
+                (255, 255, 255),
+            )
+            screen.blit(weapon_text, (SCREEN_WIDTH - 380, SCREEN_HEIGHT - 40))
             
             # Decrease invulnerability timer
             invulnerability_timer -= dt

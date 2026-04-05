@@ -1,5 +1,15 @@
 import circleshape
-from constants import PLAYER_RADIUS, PLAYER_TURN_SPEED, PLAYER_ACCELERATION, PLAYER_MAX_SPEED, PLAYER_FRICTION, LINE_WIDTH, PLAYER_SHOOT_SPEED, PLAYER_SHOOT_COOLDOWN_SECONDS
+from constants import (
+    PLAYER_RADIUS,
+    PLAYER_TURN_SPEED,
+    PLAYER_ACCELERATION,
+    PLAYER_MAX_SPEED,
+    PLAYER_FRICTION,
+    LINE_WIDTH,
+    SINGLE_SHOT_COOLDOWN_SECONDS,
+    SPREAD_SHOT_COOLDOWN_SECONDS,
+    BURST_SHOT_COOLDOWN_SECONDS,
+)
 import pygame
 from shot import Shot
 
@@ -8,6 +18,7 @@ class Player(circleshape.CircleShape):
         super().__init__(x, y, PLAYER_RADIUS)
         self.rotation = 0
         self.shoot_cooldown = 0
+        self.weapon_type = "single"
 
     # in the Player class
     def triangle(self):
@@ -34,17 +45,30 @@ class Player(circleshape.CircleShape):
             self.velocity = self.velocity.normalize() * PLAYER_MAX_SPEED
     
     def apply_friction(self, dt):
-        # Apply friction (gradual slowdown when not accelerating)
-        self.velocity *= PLAYER_FRICTION
+        # Frame-time damping so coasting slows consistently across frame rates.
+        damping = max(0.0, 1.0 - PLAYER_FRICTION * dt)
+        self.velocity *= damping
+
+    def set_weapon(self, weapon_type):
+        if weapon_type in ("single", "spread", "burst"):
+            self.weapon_type = weapon_type
+
+    def get_weapon_name(self):
+        return self.weapon_type.capitalize()
+
+    def get_weapon_cooldown(self):
+        if self.weapon_type == "spread":
+            return SPREAD_SHOT_COOLDOWN_SECONDS
+        if self.weapon_type == "burst":
+            return BURST_SHOT_COOLDOWN_SECONDS
+        return SINGLE_SHOT_COOLDOWN_SECONDS
     
     def shoot(self):
-        unit_vector = pygame.Vector2(0,1)
-        rotated_vector = unit_vector.rotate(self.rotation)
-        velocity = rotated_vector * PLAYER_SHOOT_SPEED
-        return Shot(self.position, velocity)
+        Shot.fire_weapon(self.weapon_type, self.position, self.rotation)
 
     def update(self, dt):
         keys = pygame.key.get_pressed()
+        thrusting = False
 
         if keys[pygame.K_a]:
             self.rotate(-dt)
@@ -54,6 +78,7 @@ class Player(circleshape.CircleShape):
 
         if keys[pygame.K_w]:
             self.accelerate(dt)
+            thrusting = True
 
         if keys[pygame.K_s]:
             # Accelerate backward
@@ -61,14 +86,16 @@ class Player(circleshape.CircleShape):
             self.velocity -= forward * PLAYER_ACCELERATION * dt
             if self.velocity.length() > PLAYER_MAX_SPEED:
                 self.velocity = self.velocity.normalize() * PLAYER_MAX_SPEED
+            thrusting = True
 
-        # Apply friction every frame
-        self.apply_friction(dt)
+        # Only apply friction while coasting so acceleration feels responsive.
+        if not thrusting:
+            self.apply_friction(dt)
 
         if keys[pygame.K_SPACE]:
             if self.shoot_cooldown <= 0:
                 self.shoot()
-                self.shoot_cooldown = PLAYER_SHOOT_COOLDOWN_SECONDS
+                self.shoot_cooldown = self.get_weapon_cooldown()
 
         self.shoot_cooldown -= dt
         
