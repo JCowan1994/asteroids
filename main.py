@@ -1,6 +1,7 @@
 import pygame, sys
 import json
 import os
+import random
 from constants import SCREEN_WIDTH, SCREEN_HEIGHT, ASTEROID_POINTS, STARTING_LIVES, RESPAWN_INVULNERABILITY_TIME
 from logger import log_state, log_event
 from player import Player
@@ -16,6 +17,28 @@ def main():
     print(f"Screen width: {SCREEN_WIDTH}, Screen height: {SCREEN_HEIGHT}")
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+    # Create animated parallax starfield (far, mid, near layers)
+    star_layers = [
+        {"count": 80, "speed_min": 0.2, "speed_max": 0.8, "size": 1, "brightness_min": 80, "brightness_max": 150},
+        {"count": 50, "speed_min": 0.8, "speed_max": 1.6, "size": 1, "brightness_min": 140, "brightness_max": 210},
+        {"count": 30, "speed_min": 1.6, "speed_max": 3.0, "size": 2, "brightness_min": 200, "brightness_max": 255},
+    ]
+    starfield = []
+    for layer in star_layers:
+        layer_stars = []
+        for _ in range(layer["count"]):
+            layer_stars.append(
+                {
+                    "x": random.randint(0, SCREEN_WIDTH),
+                    "y": random.randint(0, SCREEN_HEIGHT),
+                    "speed": random.uniform(layer["speed_min"], layer["speed_max"]),
+                    "size": layer["size"],
+                    "brightness": random.randint(layer["brightness_min"], layer["brightness_max"]),
+                }
+            )
+        starfield.append(layer_stars)
+    
     clock = pygame.time.Clock()
     dt = 0
 
@@ -71,6 +94,12 @@ def main():
                     asteroids.empty()
                     shots.empty()
                     explosions.clear()
+                    # Reset starfield positions
+                    for layer_stars in starfield:
+                        for star in layer_stars:
+                            star["x"] = random.randint(0, SCREEN_WIDTH)
+                            star["y"] = random.randint(0, SCREEN_HEIGHT)
+                    
                     # Recreate game objects
                     Player.containers = (updatable, drawable)
                     Asteroid.containers = (asteroids, updatable, drawable)
@@ -82,8 +111,13 @@ def main():
         if not game_over:
             updatable.update(dt)
         if not game_over:
-            for asteroid in asteroids:
-                for shot in shots:
+            # Iterate over snapshots to avoid re-processing newly spawned asteroids in the same frame.
+            for asteroid in list(asteroids):
+                if not asteroid.alive():
+                    continue
+                for shot in list(shots):
+                    if not shot.alive():
+                        continue
                     if (asteroid.position - shot.position).length() < asteroid.radius + shot.radius:
                         log_event("asteroid_shot")
                         score += ASTEROID_POINTS
@@ -91,6 +125,8 @@ def main():
                         explosions.append(Explosion(asteroid.position.copy()))
                         asteroid.split()
                         shot.kill()
+                        # One shot can only hit one asteroid per frame.
+                        break
             for object in asteroids:
                 if player.collides_with(object) and invulnerability_timer <= 0:
                     log_event("player_hit")
@@ -111,6 +147,20 @@ def main():
             # During game over, don't update game state
             pass
         screen.fill("black")
+        
+        # Draw animated starfield background
+        for layer_stars in starfield:
+            for star in layer_stars:
+                star["y"] += star["speed"]
+                if star["y"] > SCREEN_HEIGHT:
+                    star["y"] = 0
+                    star["x"] = random.randint(0, SCREEN_WIDTH)
+                pygame.draw.circle(
+                    screen,
+                    (star["brightness"], star["brightness"], star["brightness"]),
+                    (int(star["x"]), int(star["y"])),
+                    star["size"],
+                )
         
         if not game_over:
             # Blink player during invulnerability
