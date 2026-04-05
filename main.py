@@ -2,13 +2,25 @@ import pygame, sys
 import json
 import os
 import random
-from constants import SCREEN_WIDTH, SCREEN_HEIGHT, ASTEROID_POINTS, STARTING_LIVES, RESPAWN_INVULNERABILITY_TIME
+from constants import (
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
+    ASTEROID_POINTS,
+    STARTING_LIVES,
+    RESPAWN_INVULNERABILITY_TIME,
+    POWERUP_SPAWN_RATE_SECONDS,
+    BOMB_BLAST_RADIUS,
+    BOMB_SHOCKWAVE_DURATION,
+    BOMB_PICKUP_AMOUNT,
+)
 from logger import log_state, log_event
 from player import Player
 from asteroid import Asteroid
 from asteroidfield import AsteroidField
 from shot import Shot
-from explosion import Explosion
+from explosion import Explosion, Shockwave
+from powerup import PowerUp
+from bomb import Bomb
 
 HIGH_SCORE_FILE = "highscore.json"
 
@@ -46,12 +58,16 @@ def main():
     drawable = pygame.sprite.Group()
     asteroids = pygame.sprite.Group()
     shots = pygame.sprite.Group()
+    powerups = pygame.sprite.Group()
+    bombs = pygame.sprite.Group()
     explosions = []
 
     Player.containers = (updatable, drawable)
     Asteroid.containers = (asteroids, updatable, drawable)
     AsteroidField.containers = (updatable,)
     Shot.containers = (shots, updatable, drawable)
+    PowerUp.containers = (powerups, updatable, drawable)
+    Bomb.containers = (bombs, updatable, drawable)
 
     # Instantiate player at center of screen
     player = Player(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
@@ -72,6 +88,7 @@ def main():
     lives = STARTING_LIVES
     invulnerability_timer = 0
     game_over = False
+    powerup_spawn_timer = 0
     
     font = pygame.font.Font(None, 36)
     large_font = pygame.font.Font(None, 72)
@@ -88,6 +105,10 @@ def main():
                     player.set_weapon("spread")
                 elif event.key == pygame.K_3:
                     player.set_weapon("burst")
+                elif event.key == pygame.K_b:
+                    bomb = player.drop_bomb()
+                    if bomb:
+                        log_event("bomb_dropped")
             if game_over and event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE:
                     # Restart game
@@ -100,6 +121,8 @@ def main():
                     drawable.empty()
                     asteroids.empty()
                     shots.empty()
+                    powerups.empty()
+                    bombs.empty()
                     explosions.clear()
                     # Reset starfield positions
                     for layer_stars in starfield:
@@ -112,11 +135,21 @@ def main():
                     Asteroid.containers = (asteroids, updatable, drawable)
                     AsteroidField.containers = (updatable,)
                     Shot.containers = (shots, updatable, drawable)
+                    PowerUp.containers = (powerups, updatable, drawable)
+                    Bomb.containers = (bombs, updatable, drawable)
                     player = Player(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
                     asteroid_field = AsteroidField()
+                    powerup_spawn_timer = 0
         
         if not game_over:
             updatable.update(dt)
+            powerup_spawn_timer += dt
+            if powerup_spawn_timer >= POWERUP_SPAWN_RATE_SECONDS:
+                powerup_spawn_timer = 0
+                PowerUp.spawn_random(
+                    random.uniform(60, SCREEN_WIDTH - 60),
+                    random.uniform(60, SCREEN_HEIGHT - 60),
+                )
         if not game_over:
             # Iterate over snapshots to avoid re-processing newly spawned asteroids in the same frame.
             for asteroid in list(asteroids):
@@ -134,8 +167,53 @@ def main():
                         shot.kill()
                         # One shot can only hit one asteroid per frame.
                         break
+
+            # Power-up pickup handling.
+            for powerup in list(powerups):
+                if player.collides_with(powerup):
+                    if powerup.kind == "shield":
+                        player.activate_shield()
+                        log_event("powerup_shield")
+                    elif powerup.kind == "speed":
+                        player.activate_speed_boost()
+                        log_event("powerup_speed")
+                    else:
+                        player.bombs += BOMB_PICKUP_AMOUNT
+                        log_event("powerup_bomb", amount=BOMB_PICKUP_AMOUNT)
+                    powerup.kill()
+
+            # Bomb explosion handling.
+            for bomb in list(bombs):
+                if not bomb.ready_to_explode():
+                    continue
+                destroyed = 0
+                for asteroid in list(asteroids):
+                    if (asteroid.position - bomb.position).length() <= BOMB_BLAST_RADIUS + asteroid.radius:
+                        explosions.append(Explosion(asteroid.position.copy()))
+                        asteroid.kill()
+                        score += ASTEROID_POINTS
+                        destroyed += 1
+                explosions.append(Explosion(bomb.position.copy()))
+                explosions.append(
+                    Shockwave(
+                        bomb.position.copy(),
+                        BOMB_BLAST_RADIUS,
+                        BOMB_SHOCKWAVE_DURATION,
+                        color=(255, 180, 80),
+                        width=2,
+                    )
+                )
+                bomb.kill()
+                log_event("bomb_exploded", destroyed=destroyed)
+
             for object in asteroids:
                 if object.collides_with(player) and invulnerability_timer <= 0:
+                    if player.has_shield():
+                        player.consume_shield()
+                        explosions.append(Explosion(object.position.copy()))
+                        object.kill()
+                        log_event("shield_block")
+                        continue
                     log_event("player_hit")
                     lives -= 1
                     if lives <= 0:
@@ -173,6 +251,14 @@ def main():
             # Blink player during invulnerability
             if invulnerability_timer <= 0 or int(invulnerability_timer * 10) % 2 == 0:
                 player.draw(screen)
+                if player.has_shield():
+                    pygame.draw.circle(
+                        screen,
+                        "deepskyblue",
+                        player.position,
+                        int(player.radius * 1.55),
+                        2,
+                    )
             for sprite in drawable:
                 if sprite != player:
                     sprite.draw(screen)
@@ -196,6 +282,24 @@ def main():
                 (255, 255, 255),
             )
             screen.blit(weapon_text, (SCREEN_WIDTH - 380, SCREEN_HEIGHT - 40))
+            bomb_text = font.render(f"Bombs: {player.bombs} (B)", True, (255, 255, 255))
+            screen.blit(bomb_text, (10, SCREEN_HEIGHT - 75))
+
+            if player.has_shield():
+                shield_text = font.render(
+                    f"Shield: {max(0.0, player.shield_timer):.1f}s",
+                    True,
+                    (70, 200, 255),
+                )
+                screen.blit(shield_text, (SCREEN_WIDTH - 280, 45))
+
+            if player.has_speed_boost():
+                speed_text = font.render(
+                    f"Speed Boost: {max(0.0, player.speed_boost_timer):.1f}s",
+                    True,
+                    (120, 255, 120),
+                )
+                screen.blit(speed_text, (SCREEN_WIDTH - 330, 75))
             
             # Decrease invulnerability timer
             invulnerability_timer -= dt
