@@ -1,7 +1,7 @@
 [project]
 name = "asteroids"
 version = "0.1.0"
-description = "Add your description here"
+description = "Arcade-style Asteroids game built with pygame, featuring weapons, powerups, bombs, and modular gameplay systems"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

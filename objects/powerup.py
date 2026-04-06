@@ -2,7 +2,7 @@ import random
 
 import pygame
 
-from circleshape import CircleShape
+from .circleshape import CircleShape
 from constants import POWERUP_RADIUS, POWERUP_DRIFT_SPEED, LINE_WIDTH
 
 

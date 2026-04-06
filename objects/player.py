@@ -1,10 +1,9 @@
-from triangleshape import TriangleShape
+from .triangleshape import TriangleShape
 from constants import (
     PLAYER_RADIUS,
     PLAYER_TURN_SPEED,
     PLAYER_ACCELERATION,
     PLAYER_MAX_SPEED,
-    PLAYER_FRICTION,
     LINE_WIDTH,
     SINGLE_SHOT_COOLDOWN_SECONDS,
     SPREAD_SHOT_COOLDOWN_SECONDS,
@@ -16,8 +15,8 @@ from constants import (
     BOMB_DROP_COOLDOWN_SECONDS,
 )
 import pygame
-from shot import Shot
-from bomb import Bomb
+from .shot import Shot
+from .bomb import Bomb
 
 class Player(TriangleShape):
     def __init__ (self, x, y):
@@ -85,11 +84,6 @@ class Player(TriangleShape):
         if self.velocity.length() > max_speed:
             self.velocity = self.velocity.normalize() * max_speed
     
-    def apply_friction(self, dt):
-        # Frame-time damping so coasting slows consistently across frame rates.
-        damping = max(0.0, 1.0 - PLAYER_FRICTION * dt)
-        self.velocity *= damping
-
     def set_weapon(self, weapon_type):
         if weapon_type in ("single", "spread", "burst"):
             self.weapon_type = weapon_type
@@ -130,9 +124,9 @@ class Player(TriangleShape):
                 self.velocity = self.velocity.normalize() * max_speed
             thrusting = True
 
-        # Only apply friction while coasting so acceleration feels responsive.
+        # Stop immediately when thrust keys are released.
         if not thrusting:
-            self.apply_friction(dt)
+            self.velocity.update(0, 0)
 
         if keys[pygame.K_SPACE]:
             if self.shoot_cooldown <= 0:

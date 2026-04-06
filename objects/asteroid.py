@@ -1,4 +1,4 @@
-from circleshape import CircleShape
+from .circleshape import CircleShape
 import pygame
 from logger import log_event
 import random

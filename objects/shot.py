@@ -1,4 +1,4 @@
-from circleshape import CircleShape
+from .circleshape import CircleShape
 from constants import (
     SHOT_RADIUS,
     LINE_WIDTH,
